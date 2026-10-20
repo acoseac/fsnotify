@@ -264,8 +264,8 @@ func (w *kqueue) Close() error {
 			continue
 		}
 		_ = w.register([]int{info.wd}, unix.EV_DELETE, 0)
-		unix.Close(info.wd)
 		w.watches.remove(info.wd, name)
+		unix.Close(info.wd)
 	}
 
 	unix.Close(w.closepipe[1]) // Send "quit" message to readEvents
@@ -317,9 +317,12 @@ func (w *kqueue) remove(name string, unwatchFiles bool) error {
 		return err
 	}
 
-	unix.Close(info.wd)
-
+	// Drop the table entries before closing: once the descriptor is closed
+	// its number can be handed to a concurrent addWatch, and a later delete
+	// by number would remove that new watch's entry (fsnotify#795).
 	isDir := w.watches.remove(info.wd, name)
+
+	unix.Close(info.wd)
 
 	// Find all watched paths that are in this directory that are not external.
 	if unwatchFiles && isDir {
